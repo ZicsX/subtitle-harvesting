@@ -42,6 +42,9 @@ def download_subtitles(driver, writer, file):
                 year = year_match.group(0) if year_match else ''
 
                 title = re.sub(r'\b\d{4}\b', '', srt_file)  # Remove year
+                title = re.sub(r'S\d{2}E\d{2}', '', title)  # Remove season and episode
+                title = re.sub(r'\d+p', '', title)  # Remove resolution
+                title = re.sub(r'WEB|HDTV|x264|x265|MiNX|HIN', '', title, flags=re.I)  # Remove source or encoding
                 title = re.sub(r'[-_.]', ' ', title)  # Replace hyphens and dots with spaces
                 title = re.sub(r'\s+', ' ', title).strip()  # Remove extra spaces
 
