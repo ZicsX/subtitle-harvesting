@@ -33,8 +33,7 @@ def setup_driver():
     if platform == "win32":
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
         options.add_argument(f"user-agent={USER_AGENT_WIN}")
-        
-    elif platform == "linux":
+    elif platform.startswith("linux"):
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
 
@@ -67,12 +66,15 @@ def set_language_filter(driver, csrf_token):
     driver.refresh()
 
 def download_and_extract_zip(download_link, session):
+    if not os.path.exists('subtitles'):
+        os.makedirs('subtitles')
+    
     zip_response = session.get(download_link)
     z = zipfile.ZipFile(io.BytesIO(zip_response.content))
 
     srt_files = [name for name in z.namelist() if name.endswith(".srt")]
     if srt_files:
-        srt_file_name = srt_files[0]  # Extract the first .srt file
+        srt_file_name = srt_files[0]
         z.extract(srt_file_name, path="subtitles")
         return srt_file_name
     return None
@@ -82,7 +84,7 @@ def download_subtitles(driver, writer, session, file):
     while True:
         try:
             driver.get(f"{BASE_URL}/subtitles/search/?page={page_number}&language={LANGUAGE}")
-            WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr.subtitle-entry")))
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "tr.subtitle-entry")))
             
             entries = driver.find_elements(By.CSS_SELECTOR, "tr.subtitle-entry")
             if not entries:
@@ -92,7 +94,9 @@ def download_subtitles(driver, writer, session, file):
                 try:
                     title_element = entry.find_element(By.CSS_SELECTOR, 'a[alt="Subtitles\' page"]')
                     title = title_element.text.strip()
-                    year = title.split("(")[-1].split(")")[0]
+                    
+                    # Check for year existence
+                    year = title.split("(")[-1].split(")")[0] if "(" in title and ")" in title else "N/A"
 
                     download_link_element = entry.find_element(By.CSS_SELECTOR, 'a[rel="nofollow"]')
                     download_link = download_link_element.get_attribute("href")
