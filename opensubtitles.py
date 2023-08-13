@@ -11,9 +11,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from traceback import format_exc
+from s3_manager import S3SubtitleManager
 
 # Constants
-SUBTITLES_DIR = "subtitles"
 BASE_URL = "https://www.opensubtitles.org/en/search/sublanguageid-hin/offset-"
 SESSION = requests.Session()
 
@@ -25,6 +25,8 @@ ENTRY_CSS_SELECTOR = "tr.change.even.expandable, tr.change.odd.expandable"
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
+
+s3_manager = S3SubtitleManager(bucket_name="")
 
 
 def setup_driver():
@@ -67,12 +69,9 @@ def download_and_extract_zip(download_link):
     for srt_file in srt_files:
         content = z.read(srt_file).decode("utf-8")
         processed_content = process_srt_content(content)
-        output_filename = os.path.join(
-            SUBTITLES_DIR, os.path.splitext(srt_file)[0] + ".txt"
-        )
+        output_filename = os.path.splitext(srt_file)[0] + ".txt"
 
-        with open(output_filename, "w", encoding="utf-8") as txt_file:
-            txt_file.write(processed_content)
+        s3_manager.upload_subtitle(output_filename, processed_content)
 
         title, year = get_title_and_year_from_filename(srt_file)
         yield output_filename, title, year
@@ -126,10 +125,6 @@ def download_subtitles(driver, writer, file):
 
 def main():
     driver = setup_driver()
-
-    if not os.path.exists(SUBTITLES_DIR):
-        os.makedirs(SUBTITLES_DIR)
-
     try:
         with open("subtitles.csv", "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
