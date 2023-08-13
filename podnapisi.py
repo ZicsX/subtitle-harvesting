@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import csv
 import zipfile
 import requests
@@ -75,27 +76,30 @@ def set_language_filter(driver, csrf_token):
     driver.refresh()
 
 
-import re
-
 def process_srt_content(content):
     """Process and clean the .srt file content"""
     lines = content.splitlines()
     cleaned_lines = []
     skip_next = False
     for line in lines:
-        if re.match(r"\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}", line) or line.isdigit() or line == '':
+        if (
+            re.match(r"\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}", line)
+            or line.isdigit()
+            or line == ""
+        ):
             skip_next = True
             continue
         if skip_next:
             cleaned_lines.append(line)
             skip_next = False
         else:
-            cleaned_lines[-1] = cleaned_lines[-1] + ' ' + line
+            cleaned_lines[-1] = cleaned_lines[-1] + " " + line
 
     # Remove any HTML tags
-    cleaned_content = '\n'.join(cleaned_lines)
-    cleaned_content = re.sub(r'<.*?>', '', cleaned_content)
+    cleaned_content = "\n".join(cleaned_lines)
+    cleaned_content = re.sub(r"<.*?>", "", cleaned_content)
     return cleaned_content
+
 
 def download_and_extract_zip(download_link, session):
     zip_response = session.get(download_link)
@@ -104,14 +108,15 @@ def download_and_extract_zip(download_link, session):
     srt_files = [name for name in z.namelist() if name.endswith(".srt")]
     if srt_files:
         srt_file_name = srt_files[0]
-        srt_content = z.read(srt_file_name).decode('utf-8')
+        srt_content = z.read(srt_file_name).decode("utf-8")
         cleaned_content = process_srt_content(srt_content)
         txt_file_name = os.path.splitext(srt_file_name)[0] + ".txt"
-        with open(os.path.join("subtitles", txt_file_name), 'w', encoding="utf-8") as txt_file:
+        with open(
+            os.path.join("subtitles", txt_file_name), "w", encoding="utf-8"
+        ) as txt_file:
             txt_file.write(cleaned_content)
         return txt_file_name
     return None
-
 
 
 def download_subtitles(driver, writer, session, file):
