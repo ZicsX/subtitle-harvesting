@@ -12,13 +12,19 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from traceback import format_exc
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-
 # Constants
 SUBTITLES_DIR = "subtitles"
 BASE_URL = "https://www.opensubtitles.org/en/search/sublanguageid-hin/offset-"
 SESSION = requests.Session()
+
+# Regexp Patterns
+TIME_PATTERN = re.compile(r"(\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3})")
+INDEX_PATTERN = re.compile(r"^\d+$")
+YEAR_PATTERN = re.compile(r"\b\d{4}\b")
+ENTRY_CSS_SELECTOR = "tr.change.even.expandable, tr.change.odd.expandable"
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 
 def setup_driver():
@@ -42,22 +48,14 @@ def setup_driver():
 
 def process_srt_content(content):
     """Process the srt content and return cleaned lines."""
+
     lines = content.splitlines()
-
-    time_pattern = re.compile(
-        r"(\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3})"
-    )
-    index_pattern = re.compile(r"^\d+$")
-
-    cleaned_lines = []
-
-    for line in lines:
-        if not (time_pattern.match(line) or index_pattern.match(line)):
-            cleaned_lines.append(line.strip())
-
-    cleaned_content = "\n".join(cleaned_lines).replace("\n\n", "\n")
-
-    return cleaned_content
+    cleaned_lines = [
+        line.strip()
+        for line in lines
+        if not (TIME_PATTERN.match(line) or INDEX_PATTERN.match(line))
+    ]
+    return "\n".join(cleaned_lines).replace("\n\n", "\n")
 
 
 def download_and_extract_zip(download_link):
@@ -67,11 +65,8 @@ def download_and_extract_zip(download_link):
     srt_files = [name for name in z.namelist() if name.endswith(".srt")]
 
     for srt_file in srt_files:
-        # Process content in memory
         content = z.read(srt_file).decode("utf-8")
         processed_content = process_srt_content(content)
-
-        # Generate output .txt filename based on the original .srt filename
         output_filename = os.path.join(
             SUBTITLES_DIR, os.path.splitext(srt_file)[0] + ".txt"
         )
@@ -80,11 +75,11 @@ def download_and_extract_zip(download_link):
             txt_file.write(processed_content)
 
         title, year = get_title_and_year_from_filename(srt_file)
-        yield output_filename, title, year  # yield the result so that we can log it
+        yield output_filename, title, year
 
 
 def get_title_and_year_from_filename(filename):
-    year_match = re.search(r"\b\d{4}\b", filename)
+    year_match = YEAR_PATTERN.search(filename)
     year = year_match.group(0) if year_match else "N/A"
 
     title = re.sub(
@@ -93,54 +88,45 @@ def get_title_and_year_from_filename(filename):
         filename,
         flags=re.I,
     )
-    title = re.sub(r"\s+", " ", title).strip()
-
-    return title, year
+    return re.sub(r"\s+", " ", title).strip(), year
 
 
 def download_subtitles(driver, writer, file):
-    driver.get(BASE_URL + "0")
-    total_entries_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, "div.msg.hint span b:nth-child(3)")
+    try:
+        driver.get(BASE_URL + "0")
+        total_entries_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "div.msg.hint span b:nth-child(3)")
+            )
         )
-    )
-    total_entries = int(total_entries_element.text)
+        total_entries = int(total_entries_element.text)
 
-    for offset in range(0, total_entries, 40):
-        try:
-            driver.get(BASE_URL + str(offset))
-            WebDriverWait(driver, 10).until(
+        for offset in range(0, total_entries, 40):
+            driver.get(os.path.join(BASE_URL, str(offset)))
+            entries = WebDriverWait(driver, 10).until(
                 EC.presence_of_all_elements_located(
-                    (
-                        By.CSS_SELECTOR,
-                        "tr.change.even.expandable, tr.change.odd.expandable",
-                    )
+                    (By.CSS_SELECTOR, ENTRY_CSS_SELECTOR)
                 )
             )
-            entries = driver.find_elements(
-                By.CSS_SELECTOR, "tr.change.even.expandable, tr.change.odd.expandable"
-            )
-
             for entry in entries:
-                download_id = entry.get_attribute("id").replace("name", "")
-                download_link = (
-                    f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
-                )
-                for output_filename, title, year in download_and_extract_zip(
-                    download_link
-                ):
-                    writer.writerow([title, year, output_filename])
-                    file.flush()
+                try:
+                    download_id = entry.get_attribute("id").replace("name", "")
+                    download_link = f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
+                    for output_filename, title, year in download_and_extract_zip(
+                        download_link
+                    ):
+                        writer.writerow([title, year, output_filename])
+                        file.flush()
+                except Exception as e:
+                    logging.error(f"Error processing an entry: {e}\n{format_exc()}")
 
-        except Exception as e:
-            logging.error(f"Error processing an entry: {e}\n{format_exc()}")
+    except Exception as e:
+        logging.error(f"Error during downloading: {e}\n{format_exc()}")
 
 
 def main():
     driver = setup_driver()
 
-    # Ensure the subtitles directory exists
     if not os.path.exists(SUBTITLES_DIR):
         os.makedirs(SUBTITLES_DIR)
 
@@ -149,12 +135,9 @@ def main():
             writer = csv.writer(file)
             writer.writerow(["Title", "Year", "Subtitle File"])
             download_subtitles(driver, writer, file)
-
         logging.info("Script completed successfully.")
-
     except Exception as e:
         logging.error(f"Error: {e}\n{format_exc()}")
-
     finally:
         driver.quit()
 
