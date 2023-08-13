@@ -14,9 +14,10 @@ from selenium.webdriver.support import expected_conditions as EC
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
+
 def setup_driver():
     options = Options()
-    
+
     # Common settings
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-gpu")
@@ -28,18 +29,18 @@ def setup_driver():
     if platform == "win32":
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
     elif platform.startswith("linux"):
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
     return webdriver.Chrome(options=options)
 
 
 def download_subtitles(driver, writer, file):
     driver.get("https://www.opensubtitles.org/en/search/sublanguageid-hin/offset-0")
-    
-    if not os.path.exists('subtitles'):
-        os.makedirs('subtitles')
-    
+
+    if not os.path.exists("subtitles"):
+        os.makedirs("subtitles")
+
     total_entries_element = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located(
             (By.CSS_SELECTOR, "div.msg.hint span b:nth-child(3)")
@@ -54,7 +55,10 @@ def download_subtitles(driver, writer, file):
             )
             WebDriverWait(driver, 10).until(
                 EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, "tr.change.even.expandable, tr.change.odd.expandable")
+                    (
+                        By.CSS_SELECTOR,
+                        "tr.change.even.expandable, tr.change.odd.expandable",
+                    )
                 )
             )
             entries = driver.find_elements(
@@ -63,7 +67,9 @@ def download_subtitles(driver, writer, file):
 
             for entry in entries:
                 download_id = entry.get_attribute("id").replace("name", "")
-                download_link = f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
+                download_link = (
+                    f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
+                )
 
                 zip_response = requests.get(download_link)
                 z = zipfile.ZipFile(io.BytesIO(zip_response.content))
@@ -106,6 +112,7 @@ def main():
 
     finally:
         driver.quit()
+
 
 if __name__ == "__main__":
     main()
