@@ -40,15 +40,47 @@ def setup_driver():
     return webdriver.Chrome(options=options)
 
 
+def process_srt_content(content):
+    """Process the srt content and return cleaned lines."""
+    lines = content.splitlines()
+
+    time_pattern = re.compile(
+        r"(\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3})"
+    )
+    index_pattern = re.compile(r"^\d+$")
+
+    cleaned_lines = []
+
+    for line in lines:
+        if not (time_pattern.match(line) or index_pattern.match(line)):
+            cleaned_lines.append(line.strip())
+
+    cleaned_content = "\n".join(cleaned_lines).replace("\n\n", "\n")
+
+    return cleaned_content
+
+
 def download_and_extract_zip(download_link):
     zip_response = SESSION.get(download_link)
     z = zipfile.ZipFile(io.BytesIO(zip_response.content))
 
     srt_files = [name for name in z.namelist() if name.endswith(".srt")]
-    for srt_file in srt_files:
-        z.extract(srt_file, path=SUBTITLES_DIR)
 
-    return srt_files
+    for srt_file in srt_files:
+        # Process content in memory
+        content = z.read(srt_file).decode("utf-8")
+        processed_content = process_srt_content(content)
+
+        # Generate output .txt filename based on the original .srt filename
+        output_filename = os.path.join(
+            SUBTITLES_DIR, os.path.splitext(srt_file)[0] + ".txt"
+        )
+
+        with open(output_filename, "w", encoding="utf-8") as txt_file:
+            txt_file.write(processed_content)
+
+        title, year = get_title_and_year_from_filename(srt_file)
+        yield output_filename, title, year  # yield the result so that we can log it
 
 
 def get_title_and_year_from_filename(filename):
@@ -95,12 +127,10 @@ def download_subtitles(driver, writer, file):
                 download_link = (
                     f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
                 )
-
-                srt_files = download_and_extract_zip(download_link)
-
-                for srt_file in srt_files:
-                    title, year = get_title_and_year_from_filename(srt_file)
-                    writer.writerow([title, year, srt_file])
+                for output_filename, title, year in download_and_extract_zip(
+                    download_link
+                ):
+                    writer.writerow([title, year, output_filename])
                     file.flush()
 
         except Exception as e:
