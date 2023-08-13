@@ -5,6 +5,7 @@ import csv
 import zipfile
 import requests
 import logging
+from s3_manager import S3SubtitleManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -16,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 BASE_URL = "https://www.podnapisi.net"
 LANGUAGE = "hi"
 USER_AGENT_WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-
+s3_manager = S3SubtitleManager(bucket_name='bucket_name')
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
@@ -111,10 +112,10 @@ def download_and_extract_zip(download_link, session):
         srt_content = z.read(srt_file_name).decode("utf-8")
         cleaned_content = process_srt_content(srt_content)
         txt_file_name = os.path.splitext(srt_file_name)[0] + ".txt"
-        with open(
-            os.path.join("subtitles", txt_file_name), "w", encoding="utf-8"
-        ) as txt_file:
-            txt_file.write(cleaned_content)
+        
+        # Upload to S3
+        s3_manager.upload_subtitle(txt_file_name, cleaned_content)
+
         return txt_file_name
     return None
 
@@ -174,8 +175,8 @@ def download_subtitles(driver, writer, session, file):
 def main():
     driver = setup_driver()
     session = requests.Session()
-    if not os.path.exists("subtitles"):
-        os.makedirs("subtitles")
+
+    
     try:
         driver.get(BASE_URL)
         csrf_token = get_csrf_token(driver)
