@@ -76,9 +76,6 @@ def set_language_filter(driver, csrf_token):
 
 
 def download_and_extract_zip(download_link, session):
-    if not os.path.exists("subtitles"):
-        os.makedirs("subtitles")
-
     zip_response = session.get(download_link)
     z = zipfile.ZipFile(io.BytesIO(zip_response.content))
 
@@ -145,7 +142,8 @@ def download_subtitles(driver, writer, session, file):
 def main():
     driver = setup_driver()
     session = requests.Session()
-
+    if not os.path.exists("subtitles"):
+        os.makedirs("subtitles")
     try:
         driver.get(BASE_URL)
         csrf_token = get_csrf_token(driver)

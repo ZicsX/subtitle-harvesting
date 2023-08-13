@@ -99,7 +99,8 @@ def download_subtitles(driver, writer, file):
 
 def main():
     driver = setup_driver()
-
+    if not os.path.exists("subtitles"):
+        os.makedirs("subtitles")
     try:
         with open("subtitles.csv", "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
