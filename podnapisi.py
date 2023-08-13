@@ -17,7 +17,9 @@ def setup_driver():
 
 
 def get_csrf_token(driver):
-    return driver.execute_script('return document.querySelector(\'meta[name="csrf-token"]\').getAttribute("content");')
+    return driver.execute_script(
+        'return document.querySelector(\'meta[name="csrf-token"]\').getAttribute("content");'
+    )
 
 
 def set_language_filter(driver, csrf_token):
@@ -51,30 +53,41 @@ def set_language_filter(driver, csrf_token):
     driver.execute_script(add_hindi_script)
     driver.refresh()
 
+
 def download_subtitles(driver, writer, file):
     page_number = 1
     while True:
         try:
-            driver.get(f"https://www.podnapisi.net/subtitles/search/?page={page_number}&language=hi")
-            WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'tr.subtitle-entry')))
-            entries = driver.find_elements(By.CSS_SELECTOR, 'tr.subtitle-entry')
+            driver.get(
+                f"https://www.podnapisi.net/subtitles/search/?page={page_number}&language=hi"
+            )
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located(
+                    (By.CSS_SELECTOR, "tr.subtitle-entry")
+                )
+            )
+            entries = driver.find_elements(By.CSS_SELECTOR, "tr.subtitle-entry")
             if not entries:
                 break
 
             for entry in entries:
-                title_element = entry.find_element(By.CSS_SELECTOR, 'a[alt="Subtitles\' page"]')
+                title_element = entry.find_element(
+                    By.CSS_SELECTOR, 'a[alt="Subtitles\' page"]'
+                )
                 title = title_element.text
-                year = title.split('(')[-1].split(')')[0]
-                title = title.split('(')[0].strip()
+                year = title.split("(")[-1].split(")")[0]
+                title = title.split("(")[0].strip()
 
-                download_link_element = entry.find_element(By.CSS_SELECTOR, 'a[rel="nofollow"]')
-                download_link = download_link_element.get_attribute('href')
+                download_link_element = entry.find_element(
+                    By.CSS_SELECTOR, 'a[rel="nofollow"]'
+                )
+                download_link = download_link_element.get_attribute("href")
 
                 zip_response = requests.get(download_link)
                 z = zipfile.ZipFile(io.BytesIO(zip_response.content))
-                z.extractall(path='subtitles')
+                z.extractall(path="subtitles")
 
-                srt_file = [name for name in z.namelist() if name.endswith('.srt')][0]
+                srt_file = [name for name in z.namelist() if name.endswith(".srt")][0]
                 writer.writerow([title, year, srt_file])
                 file.flush()  # Flush the file buffer to write the data immediately
 
@@ -101,11 +114,10 @@ def main():
 
         set_language_filter(driver, csrf_token)
 
-        with open('subtitles.csv', 'w', newline='', encoding='utf-8') as file:
+        with open("subtitles.csv", "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             writer.writerow(["Title", "Year", "Subtitle File"])
             download_subtitles(driver, writer, file)
-
 
         print("Script completed successfully.")
 
