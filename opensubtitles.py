@@ -37,9 +37,6 @@ def setup_driver():
     return webdriver.Chrome(options=options)
 
 def download_and_extract_zip(download_link):
-    if not os.path.exists('subtitles'):
-        os.makedirs('subtitles')
-
     zip_response = SESSION.get(download_link)
     z = zipfile.ZipFile(io.BytesIO(zip_response.content))
 
