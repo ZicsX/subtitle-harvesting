@@ -23,14 +23,14 @@ async def fetch(session, url):
         return await response.read()
 
 async def get_total_entries(session, lang):
-    url = f"https://www.opensubtitles.org/en/search/lang-{lang}/offset-0"
+    url = f"https://www.opensubtitles.org/en/sublanguageid-{lang}/offset-0"
     page_content = await fetch(session, url)
     soup = BeautifulSoup(page_content, 'html.parser')
     total_entries_element = soup.select_one("div.msg.hint span b:nth-child(3)")
     return int(total_entries_element.text)
 
 async def crawl_links(offset, session, lang):
-    url = f"https://www.opensubtitles.org/en/search/lang-{lang}/offset-{offset}"
+    url = f"https://www.opensubtitles.org/en/sublanguageid-{lang}/offset-{offset}"
     page_content = await fetch(session, url)
     soup = BeautifulSoup(page_content, 'html.parser')
     links = [a['href'].split('/')[-1] for a in soup.find_all('a', href=re.compile(r"^/en/subtitleserve/sub/\d+$"))]
@@ -94,7 +94,7 @@ async def main(args):
                             csvwriter.writerow([link])
 
         elif args.command == 'download':
-            await download_subtitles(args.csv, limit)
+            await download_subtitles(args.csv)
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
     finally:
