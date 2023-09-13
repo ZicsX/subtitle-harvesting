@@ -13,13 +13,15 @@ from datetime import datetime
 
 # Constants
 SUBTITLES_DIR = "subtitles"
+MAX_RETRIES = 3
 
 # Regexp Patterns
 TIME_PATTERN = re.compile(r"(\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3})")
 INDEX_PATTERN = re.compile(r"^\d+$")
 
 async def fetch(session, url):
-    async with session.get(url) as response:
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537'}
+    async with session.get(url, headers=headers) as response:
         return await response.read()
 
 async def get_total_entries(session, lang):
@@ -51,10 +53,14 @@ async def process_srt_content(content):
         processed_content = await loop.run_in_executor(pool, process_srt_content_blocking, content)
     return processed_content
 
-async def download_and_extract_zip(session, download_id):
+async def download_and_extract_zip(session, download_id, retries=MAX_RETRIES):
     try:
         download_link = f"https://www.opensubtitles.org/en/subtitleserve/sub/{download_id}"
         zip_response = await fetch(session, download_link)
+
+        if not zip_response.startswith(b'PK'):  # Check if it's a zip file
+            raise ValueError("Not a zip file")
+
         z = zipfile.ZipFile(io.BytesIO(zip_response))
 
         for srt_file in z.namelist():
@@ -67,6 +73,11 @@ async def download_and_extract_zip(session, download_id):
                     await txt_file.write(processed_content)
     except Exception as e:
         print(f"An error occurred while processing {download_id}: {e}")
+        if retries > 0:
+            print(f"Retrying {download_id}. Remaining retries: {retries-1}")
+            await asyncio.sleep(2)
+            async with aiohttp.ClientSession() as new_session:  # Refresh session
+                await download_and_extract_zip(new_session, download_id, retries-1)
 
 async def download_subtitles(csvname):
     async with aiohttp.ClientSession() as session:
@@ -74,6 +85,7 @@ async def download_subtitles(csvname):
             async for line in csvfile:
                 download_id = line.strip()
                 await download_and_extract_zip(session, download_id)
+                await asyncio.sleep(1)
 
 async def main(args):
     try:
@@ -95,6 +107,7 @@ async def main(args):
 
         elif args.command == 'download':
             await download_subtitles(args.csv)
+
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
     finally:
@@ -103,7 +116,7 @@ async def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Subtitle Crawler and Downloader')
     parser.add_argument('command', choices=['crawl', 'download'], help='Command to execute.')
-    parser.add_argument('--l', type=int, default=None, help='l for crawl.')
+    parser.add_argument('--l', type=int, default=None, help='Limit for crawl.')
     parser.add_argument('--lang', type=str, default='hin', help='Subtitle language ID.')
     parser.add_argument('--csv', type=str, default=None, help='CSV file for download.')
     args = parser.parse_args()
